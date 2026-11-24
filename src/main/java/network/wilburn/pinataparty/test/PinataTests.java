@@ -50,7 +50,11 @@ public class PinataTests {
     @GameTest(template = "arena")
     public static void hangsUnderCeiling(GameTestHelper helper) {
         ServerPlayer p = player(helper);
-        BlockPos ceiling = helper.absolutePos(new BlockPos(3, 1, 3));
+        // walk up out of the floor, through the air, to the underside of the ceiling
+        BlockPos ceiling = helper.absolutePos(new BlockPos(3, 0, 3));
+        while (!helper.getLevel().getBlockState(ceiling).isAir()) {
+            ceiling = ceiling.above();
+        }
         while (helper.getLevel().getBlockState(ceiling).isAir()) {
             ceiling = ceiling.above();
         }
