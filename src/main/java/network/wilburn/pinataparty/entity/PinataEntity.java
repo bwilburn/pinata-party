@@ -49,6 +49,9 @@ public class PinataEntity extends Entity {
 
     /** Scoreboard tag put on bees that came out of a pinata. */
     public static final String PARTY_BEE_TAG = "pinataparty.party_bee";
+    /** Persistent-data keys on party bees: game time their anger ends, and when they fly off. */
+    public static final String ANGRY_UNTIL = "pinataparty.angry_until";
+    public static final String LEAVE_AT = "pinataparty.leave_at";
 
     public static final int VARIANTS = 3;
 
@@ -228,12 +231,7 @@ public class PinataEntity extends Entity {
         level.playSound(null, c.x, c.y, c.z, SoundEvents.FIREWORK_ROCKET_TWINKLE_FAR, SoundSource.NEUTRAL, 0.35f, 1.2f);
 
         // the goodies
-        List<ItemStack> drops = new ArrayList<>(this.contents);
-        if (drops.isEmpty() && getBees() == 0) {
-            // an empty pinata still gives a little something
-            drops.add(new ItemStack(Items.COOKIE, 3 + this.random.nextInt(4)));
-        }
-        for (ItemStack stack : drops) {
+        for (ItemStack stack : this.contents) {
             spawnItem(level, c, stack, 0.25);
         }
         this.contents.clear();
@@ -270,6 +268,8 @@ public class PinataEntity extends Entity {
                 p -> p.isAlive() && !p.isSpectator() && !p.getAbilities().instabuild);
         boolean breakerOnly = Config.BEE_TARGETS.get() == Config.BeeTargets.BREAKER;
         int angerTicks = Config.BEE_ANGER_SECONDS.get() * 20;
+        int leaveSeconds = Config.BEES_LEAVE_AFTER_SECONDS.get();
+        long now = level.getGameTime();
 
         for (int i = 0; i < count; i++) {
             Bee bee = EntityType.BEE.create(level);
@@ -280,6 +280,11 @@ public class PinataEntity extends Entity {
                     this.random.nextFloat() * 360.0f, 0.0f);
             bee.setDeltaMovement(this.random.nextGaussian() * 0.2, 0.15, this.random.nextGaussian() * 0.2);
             bee.addTag(PARTY_BEE_TAG);
+            // GameEvents keeps the bee angry (and stinging) until then, then sends it off
+            bee.getPersistentData().putLong(ANGRY_UNTIL, angry ? now + angerTicks : now);
+            if (leaveSeconds > 0) {
+                bee.getPersistentData().putLong(LEAVE_AT, now + (angry ? angerTicks : 0) + leaveSeconds * 20L);
+            }
 
             if (angry) {
                 Player target = null;
@@ -328,8 +333,7 @@ public class PinataEntity extends Entity {
         // empty hand: give it a squeeze and guess what's inside
         if (held.isEmpty()) {
             if (!client) {
-                player.displayClientMessage(Component.translatable("message.pinataparty.peek",
-                        this.contents.size(), getBees()), true);
+                showFill(player);
                 this.playSound(getBees() > 0 ? SoundEvents.BEEHIVE_WORK : SoundEvents.WOOL_STEP, 1.0f, 1.0f);
             }
             return InteractionResult.sidedSuccess(client);
@@ -352,6 +356,7 @@ public class PinataEntity extends Entity {
                 setBees(getBees() + 1);
                 player.setItemInHand(hand, ItemUtils.createFilledResult(held, player, new ItemStack(Items.GLASS_BOTTLE)));
                 this.playSound(SoundEvents.BEEHIVE_ENTER, 1.0f, 1.0f);
+                showFill(player);
             }
             return InteractionResult.sidedSuccess(client);
         }
@@ -367,6 +372,7 @@ public class PinataEntity extends Entity {
                     held.shrink(1);
                 }
                 this.playSound(SoundEvents.BEEHIVE_ENTER, 1.0f, 1.0f);
+                showFill(player);
             }
             return InteractionResult.sidedSuccess(client);
         }
@@ -382,6 +388,7 @@ public class PinataEntity extends Entity {
                 setBees(getBees() + moved);
                 held.set(DataComponents.BEES, List.copyOf(occupants.subList(moved, occupants.size())));
                 this.playSound(SoundEvents.BEEHIVE_EXIT, 1.0f, 1.0f);
+                showFill(player);
             }
             return InteractionResult.sidedSuccess(client);
         }
@@ -396,8 +403,19 @@ public class PinataEntity extends Entity {
                 player.setItemInHand(hand, ItemStack.EMPTY);
             }
             this.playSound(SoundEvents.BUNDLE_INSERT, 1.0f, 0.8f + this.random.nextFloat() * 0.4f);
+            showFill(player);
         }
         return InteractionResult.sidedSuccess(client);
+    }
+
+    /** Action-bar line: how full this pinata is, against the server's limits. */
+    private void showFill(Player player) {
+        int items = 0;
+        for (ItemStack stack : this.contents) {
+            items += stack.getCount();
+        }
+        player.displayClientMessage(Component.translatable("message.pinataparty.fill",
+                this.contents.size(), Config.MAX_STACKS.get(), items, getBees(), Config.MAX_BEES.get()), true);
     }
 
     private InteractionResult full(Player player, boolean client, String key) {

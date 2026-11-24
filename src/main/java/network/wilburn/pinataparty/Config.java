@@ -29,6 +29,10 @@ public final class Config {
             .comment("How long released bees stay angry.")
             .defineInRange("beeAngerSeconds", 15, 1, 120);
 
+    public static final ModConfigSpec.IntValue BEES_LEAVE_AFTER_SECONDS = BUILDER
+            .comment("Seconds after they calm down before pinata bees fly off for good (0 = they stay as ordinary bees).")
+            .defineInRange("beesLeaveAfterSeconds", 20, 0, 600);
+
     public static final ModConfigSpec.BooleanValue PARTY_BEES_CAN_KILL = BUILDER
             .comment("If false, a sting from a pinata bee never takes a player below half a heart.")
             .define("partyBeesCanKill", false);

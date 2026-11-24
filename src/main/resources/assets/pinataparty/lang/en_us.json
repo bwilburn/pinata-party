@@ -1,7 +1,7 @@
 {
   "itemGroup.pinataparty": "Piñata Party",
   "item.pinataparty.pinata": "Piñata",
-  "item.pinataparty.pinata.tooltip.empty": "Empty. Right-click it with things (or bottled bees) once it's hung up.",
+  "item.pinataparty.pinata.tooltip.empty": "Empty. Hang it up, then right-click it with items or bottled bees.",
   "item.pinataparty.pinata.tooltip.filled": "Filled: %s stacks, %s bees",
   "item.pinataparty.pinata.tooltip.buzzing": "Something inside is buzzing...",
   "item.pinataparty.pinata_bat": "Piñata Bat",
@@ -11,7 +11,7 @@
   "item.pinataparty.bottled_bee.tooltip": "It is not happy about this.",
   "entity.pinataparty.pinata": "Piñata",
   "message.pinataparty.bees": "%s broke the piñata... it was full of BEES! (%s)",
-  "message.pinataparty.peek": "You give it a squeeze. %s stacks, %s bees.",
   "message.pinataparty.full_bees": "That piñata can't hold any more bees.",
-  "message.pinataparty.full_items": "That piñata is stuffed full."
+  "message.pinataparty.full_items": "That piñata is stuffed full.",
+  "message.pinataparty.fill": "Piñata: %s/%s stacks (%s items), %s/%s bees"
 }

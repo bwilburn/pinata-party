@@ -11,7 +11,15 @@ import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUtils;
 import net.minecraft.world.item.Items;
 import net.neoforged.bus.api.SubscribeEvent;
+import net.minecraft.core.particles.ParticleTypes;
+import net.minecraft.server.level.ServerLevel;
+import net.minecraft.world.damagesource.DamageTypes;
+import net.minecraft.world.effect.MobEffectInstance;
+import net.minecraft.world.effect.MobEffects;
+import net.minecraft.world.Difficulty;
 import net.neoforged.neoforge.event.entity.living.LivingDamageEvent;
+import net.neoforged.neoforge.event.entity.living.LivingIncomingDamageEvent;
+import net.neoforged.neoforge.event.tick.EntityTickEvent;
 import net.neoforged.neoforge.event.entity.living.LivingEquipmentChangeEvent;
 import net.neoforged.neoforge.event.entity.player.PlayerInteractEvent;
 
@@ -58,6 +66,55 @@ public final class GameEvents {
         player.connection.teleport(player.getX(), player.getY(), player.getZ(), yaw, player.getXRot());
         player.level().playSound(null, player.getX(), player.getY(), player.getZ(),
                 SoundEvents.ARMOR_EQUIP_LEATHER.value(), SoundSource.PLAYERS, 1.0f, 0.7f);
+    }
+
+    private static boolean isPartyBee(Object entity) {
+        return entity instanceof Bee bee && bee.getTags().contains(PinataEntity.PARTY_BEE_TAG);
+    }
+
+    /**
+     * A vanilla bee stings once, loses its stinger, calms down and later dies. Pinata bees
+     * shouldn't: the sting is cancelled and dealt again as an ordinary hit from the bee, so
+     * vanilla never marks the bee as having stung and it keeps attacking while it's angry.
+     */
+    @SubscribeEvent
+    public static void onIncomingDamage(LivingIncomingDamageEvent event) {
+        if (!event.getSource().is(DamageTypes.STING) || !isPartyBee(event.getSource().getEntity())) {
+            return;
+        }
+        Bee bee = (Bee) event.getSource().getEntity();
+        var target = event.getEntity();
+        float amount = event.getAmount();
+        event.setCanceled(true);
+        if (target.hurt(bee.damageSources().mobAttack(bee), amount)) {
+            bee.playSound(SoundEvents.BEE_STING, 1.0f, 1.0f);
+            Difficulty difficulty = bee.level().getDifficulty();
+            if (difficulty != Difficulty.PEACEFUL && difficulty != Difficulty.EASY) {
+                // a short dose of poison per sting; vanilla's 10-18 s would stack up fast
+                target.addEffect(new MobEffectInstance(MobEffects.POISON, 60, 0), bee);
+            }
+        }
+    }
+
+    /** Keeps pinata bees angry for their whole window, then sends them off. */
+    @SubscribeEvent
+    public static void onEntityTick(EntityTickEvent.Post event) {
+        if (!isPartyBee(event.getEntity()) || !(event.getEntity().level() instanceof ServerLevel level)) {
+            return;
+        }
+        Bee bee = (Bee) event.getEntity();
+        var data = bee.getPersistentData();
+        long now = level.getGameTime();
+        long angryUntil = data.getLong(PinataEntity.ANGRY_UNTIL);
+        if (now < angryUntil && !bee.isAngry()) {
+            // something calmed it early (it lost its target, or a vanilla sting got through)
+            bee.setRemainingPersistentAngerTime((int) (angryUntil - now));
+        }
+        long leaveAt = data.getLong(PinataEntity.LEAVE_AT);
+        if (leaveAt > 0 && now >= leaveAt) {
+            level.sendParticles(ParticleTypes.POOF, bee.getX(), bee.getY() + 0.2, bee.getZ(), 6, 0.15, 0.15, 0.15, 0.02);
+            bee.discard();
+        }
     }
 
     /** Pinata bees sting, but (by default) can't finish anyone off. */

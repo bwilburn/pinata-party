@@ -179,13 +179,53 @@ public class PinataTests {
     }
 
     @GameTest(template = "arena")
-    public static void emptyPinataGivesCookies(GameTestHelper helper) {
+    public static void emptyPinataDropsNothing(GameTestHelper helper) {
         ServerPlayer p = player(helper);
         PinataEntity pinata = pinata(helper);
         pinata.hurt(p.damageSources().playerAttack(p), 1000.0f);
+        helper.assertTrue(pinata.isRemoved(), "the pinata should have burst");
         List<ItemEntity> items = helper.getLevel().getEntitiesOfClass(ItemEntity.class, pinata.getBoundingBox().inflate(4.0));
-        helper.assertTrue(items.stream().anyMatch(e -> e.getItem().is(Items.COOKIE)), "an empty pinata should drop cookies");
+        List<Bee> bees = helper.getLevel().getEntitiesOfClass(Bee.class, pinata.getBoundingBox().inflate(4.0));
+        helper.assertTrue(items.isEmpty() && bees.isEmpty(), "an empty pinata should drop nothing, got "
+                + items.size() + " items and " + bees.size() + " bees");
         helper.succeed();
+    }
+
+    @GameTest(template = "arena")
+    public static void partyBeesKeepStinging(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        Bee bee = helper.spawn(EntityType.BEE, new Vec3(1.5, 1.0, 2.0));
+        bee.addTag(PinataEntity.PARTY_BEE_TAG);
+        bee.getPersistentData().putLong(PinataEntity.ANGRY_UNTIL, helper.getLevel().getGameTime() + 300);
+        bee.setRemainingPersistentAngerTime(300);
+        bee.setPersistentAngerTarget(p.getUUID());
+        bee.setTarget(p);
+
+        float before = p.getHealth();
+        bee.doHurtTarget(p);
+        helper.assertTrue(p.getHealth() < before, "the sting should hurt (" + before + " -> " + p.getHealth() + ")");
+        helper.assertFalse(bee.hasStung(), "a party bee shouldn't lose its stinger");
+        helper.assertTrue(bee.isAngry(), "a party bee should still be angry after stinging");
+
+        // the next sting lands once the player's hurt cooldown has passed
+        helper.runAfterDelay(15, () -> {
+            float mid = p.getHealth();
+            bee.doHurtTarget(p);
+            helper.assertTrue(p.getHealth() < mid, "a second sting should hurt too");
+            helper.assertFalse(bee.hasStung(), "still no lost stinger");
+            helper.succeed();
+        });
+    }
+
+    @GameTest(template = "arena")
+    public static void partyBeesLeave(GameTestHelper helper) {
+        Bee bee = helper.spawn(EntityType.BEE, new Vec3(2.5, 2.0, 2.5));
+        bee.addTag(PinataEntity.PARTY_BEE_TAG);
+        bee.getPersistentData().putLong(PinataEntity.LEAVE_AT, helper.getLevel().getGameTime() + 5);
+        helper.runAfterDelay(10, () -> {
+            helper.assertTrue(bee.isRemoved(), "the party bee should have flown off");
+            helper.succeed();
+        });
     }
 
     @GameTest(template = "arena")
