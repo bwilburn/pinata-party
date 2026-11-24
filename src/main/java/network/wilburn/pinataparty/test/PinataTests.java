@@ -61,11 +61,16 @@ public class PinataTests {
         ItemStack stack = new ItemStack(PinataParty.PINATA.get());
         p.setItemInHand(InteractionHand.MAIN_HAND, stack);
         BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(ceiling).add(0, -0.5, 0), Direction.DOWN, ceiling, false);
-        stack.useOn(new UseOnContext(p, InteractionHand.MAIN_HAND, hit));
+        net.minecraft.world.InteractionResult result = stack.useOn(new UseOnContext(p, InteractionHand.MAIN_HAND, hit));
 
         List<PinataEntity> found = helper.getLevel().getEntitiesOfClass(PinataEntity.class,
                 new net.minecraft.world.phys.AABB(ceiling).inflate(1.0, 3.0, 1.0));
-        helper.assertTrue(found.size() == 1, "expected one pinata under the ceiling, found " + found.size());
+        List<PinataEntity> anywhere = helper.getLevel().getEntitiesOfClass(PinataEntity.class,
+                new net.minecraft.world.phys.AABB(ceiling).inflate(16.0));
+        helper.assertTrue(found.size() == 1, "expected one pinata under the ceiling, found " + found.size()
+                + " (result " + result + ", ceiling rel " + helper.relativePos(ceiling)
+                + " " + helper.getLevel().getBlockState(ceiling) + ", stack " + stack
+                + ", nearby " + anywhere.stream().map(e -> helper.relativeVec(e.position()).toString()).toList() + ")");
         PinataEntity pinata = found.get(0);
         double top = pinata.getY() + pinata.getBbHeight();
         helper.assertTrue(top < ceiling.getY() && top > ceiling.getY() - 0.5,
