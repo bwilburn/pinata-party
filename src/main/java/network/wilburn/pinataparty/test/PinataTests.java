@@ -73,7 +73,65 @@ public class PinataTests {
         helper.assertTrue(top < ceiling.getY() && top > ceiling.getY() - 0.5,
                 "pinata top should sit just under the ceiling, was " + (ceiling.getY() - top) + " below");
         helper.assertTrue(stack.isEmpty(), "placing should use up the pinata item");
+        helper.assertTrue(pinata.isHanging(), "a pinata placed under a block should be hanging");
         helper.succeed();
+    }
+
+    @GameTest(template = "arena")
+    public static void standsOnFloor(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        // from mid-air, go down to the floor
+        BlockPos floor = BlockPos.containing(helper.absoluteVec(new Vec3(3.5, 2.0, 3.5)));
+        while (helper.getLevel().getBlockState(floor).isAir()) {
+            floor = floor.below();
+        }
+        ItemStack stack = new ItemStack(PinataParty.PINATA.get());
+        p.setItemInHand(InteractionHand.MAIN_HAND, stack);
+        BlockHitResult hit = new BlockHitResult(Vec3.atCenterOf(floor).add(0, 0.5, 0), Direction.UP, floor, false);
+        stack.useOn(new UseOnContext(p, InteractionHand.MAIN_HAND, hit));
+        List<PinataEntity> found = helper.getLevel().getEntitiesOfClass(PinataEntity.class,
+                new net.minecraft.world.phys.AABB(floor).inflate(1.0, 3.0, 1.0));
+        helper.assertTrue(found.size() == 1, "expected one pinata on the floor, found " + found.size());
+        PinataEntity pinata = found.get(0);
+        helper.assertFalse(pinata.isHanging(), "a pinata placed on a floor should be standing");
+        helper.assertTrue(Math.abs(pinata.getY() - (floor.getY() + 1)) < 0.01, "it should stand on the floor");
+        helper.succeed();
+    }
+
+    @GameTest(template = "arena")
+    public static void everyWayToAddBees(GameTestHelper helper) {
+        ServerPlayer p = player(helper);
+        PinataEntity pinata = pinata(helper);
+
+        p.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(PinataParty.BOTTLED_BEE.get(), 3));
+        pinata.interact(p, InteractionHand.MAIN_HAND);
+        helper.assertTrue(pinata.getBees() == 1, "bottled bee: expected 1 bee, got " + pinata.getBees());
+        helper.assertTrue(p.getMainHandItem().getCount() == 2, "should use one bottled bee from the stack");
+        helper.assertTrue(p.getInventory().countItem(Items.GLASS_BOTTLE) == 1, "the empty bottle goes to the inventory");
+
+        p.setItemInHand(InteractionHand.MAIN_HAND, new ItemStack(Items.BEE_SPAWN_EGG));
+        pinata.interact(p, InteractionHand.MAIN_HAND);
+        helper.assertTrue(pinata.getBees() == 2, "spawn egg: expected 2 bees, got " + pinata.getBees());
+
+        ItemStack hive = new ItemStack(Items.BEEHIVE);
+        hive.set(DataComponents.BEES, List.of(
+                new net.minecraft.world.level.block.entity.BeehiveBlockEntity.Occupant(CustomData.of(new CompoundTag()), 0, 600),
+                new net.minecraft.world.level.block.entity.BeehiveBlockEntity.Occupant(CustomData.of(new CompoundTag()), 0, 600)));
+        p.setItemInHand(InteractionHand.MAIN_HAND, hive);
+        pinata.interact(p, InteractionHand.MAIN_HAND);
+        helper.assertTrue(pinata.getBees() == 4, "beehive: expected 4 bees, got " + pinata.getBees());
+        helper.assertTrue(p.getMainHandItem().is(Items.BEEHIVE), "the hive stays in hand");
+        helper.assertTrue(p.getMainHandItem().getOrDefault(DataComponents.BEES, List.of()).isEmpty(), "the hive is now empty");
+
+        // an empty beehive is just an item
+        pinata.interact(p, InteractionHand.MAIN_HAND);
+        helper.assertTrue(pinata.getBees() == 4, "an empty hive adds no bees");
+
+        // a pinata that is ticking with bees inside doesn't fall over
+        helper.runAfterDelay(40, () -> {
+            helper.assertFalse(pinata.isRemoved(), "the pinata should still be there");
+            helper.succeed();
+        });
     }
 
     @GameTest(template = "arena")

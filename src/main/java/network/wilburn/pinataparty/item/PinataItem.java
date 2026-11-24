@@ -53,11 +53,17 @@ public class PinataItem extends Item {
         } else if (face == Direction.UP) {
             y = clicked.getY() + 1.0;
         } else {
+            // clicked the side of a block: stand it on the floor in front of that face
             BlockPos side = clicked.relative(face);
             x = side.getX() + 0.5;
             z = side.getZ() + 0.5;
-            y = side.getY();
+            BlockPos below = side;
+            for (int i = 0; i < 3 && level.getBlockState(below.below()).getCollisionShape(level, below.below()).isEmpty(); i++) {
+                below = below.below();
+            }
+            y = below.getY();
         }
+        boolean hanging = face == Direction.DOWN;
 
         AABB box = probe.getType().getDimensions().makeBoundingBox(x, y, z);
         if (!level.noCollision(box)) {
@@ -67,6 +73,7 @@ public class PinataItem extends Item {
         if (!level.isClientSide()) {
             ItemStack stack = context.getItemInHand();
             probe.moveTo(x, y, z, 0.0f, 0.0f);
+            probe.setHanging(hanging);
             Player player = context.getPlayer();
             // face the player who hung it
             probe.setYRot(player != null ? player.getYRot() + 180.0f : level.random.nextFloat() * 360.0f);

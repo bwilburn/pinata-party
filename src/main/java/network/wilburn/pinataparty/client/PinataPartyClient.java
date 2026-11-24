@@ -17,10 +17,29 @@ import network.wilburn.pinataparty.PinataParty;
 
 @Mod(value = PinataParty.MODID, dist = Dist.CLIENT)
 public class PinataPartyClient {
+    /** The buzz currently playing for each pinata, by entity id. */
+    private static final java.util.Map<Integer, PinataBuzzSound> BUZZES = new java.util.HashMap<>();
+
     public PinataPartyClient(IEventBus modBus) {
+        network.wilburn.pinataparty.entity.PinataEntity.clientBuzzTicker = PinataPartyClient::keepBuzzing;
         modBus.addListener(PinataPartyClient::registerRenderers);
         modBus.addListener(PinataPartyClient::registerLayers);
         modBus.addListener(PinataPartyClient::registerGuiLayers);
+    }
+
+    /** Start (or restart, if the sound engine dropped it) the buzz for a pinata with bees in it. */
+    private static void keepBuzzing(network.wilburn.pinataparty.entity.PinataEntity pinata) {
+        var sounds = Minecraft.getInstance().getSoundManager();
+        BUZZES.values().removeIf(PinataBuzzSound::isStopped);
+        PinataBuzzSound sound = BUZZES.get(pinata.getId());
+        if (sound == null || !sounds.isActive(sound)) {
+            if (sound != null) {
+                sounds.stop(sound);
+            }
+            sound = new PinataBuzzSound(pinata);
+            BUZZES.put(pinata.getId(), sound);
+            sounds.play(sound);
+        }
     }
 
     private static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {

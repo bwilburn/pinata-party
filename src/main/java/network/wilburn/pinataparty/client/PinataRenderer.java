@@ -42,22 +42,26 @@ public class PinataRenderer extends EntityRenderer<PinataEntity> {
     public void render(PinataEntity entity, float entityYaw, float partialTick, PoseStack pose,
                        MultiBufferSource buffers, int packedLight) {
         float age = entity.tickCount + partialTick;
-        float stringBlocks = stringLength(entity);
-        float pivot = TIE_HEIGHT + stringBlocks;
+        boolean hanging = entity.isHanging();
+        float stringBlocks = hanging ? stringLength(entity) : 0.0f;
+        float hurt = entity.getHurtTime() - partialTick;
+        float knock = hurt > 0.0f ? Mth.sin(hurt * 1.3f) * hurt * 2.2f * entity.getHurtDir() : 0.0f;
 
         pose.pushPose();
 
-        // swing like a pendulum around the point the string hangs from
-        pose.translate(0.0f, pivot, 0.0f);
-        float sway = Mth.sin(age * 0.07f) * 3.0f;
-        float hurt = entity.getHurtTime() - partialTick;
-        if (hurt > 0.0f) {
-            sway += Mth.sin(hurt * 1.3f) * hurt * 2.2f * entity.getHurtDir();
+        if (hanging) {
+            // swing like a pendulum around the point the string hangs from, and turn slowly on it
+            float pivot = TIE_HEIGHT + stringBlocks;
+            pose.translate(0.0f, pivot, 0.0f);
+            pose.mulPose(Axis.YP.rotationDegrees(180.0f - entity.getYRot() + Mth.sin(age * 0.021f) * 25.0f));
+            pose.mulPose(Axis.XP.rotationDegrees(Mth.sin(age * 0.07f) * 3.0f + knock));
+            pose.mulPose(Axis.ZP.rotationDegrees(Mth.cos(age * 0.05f) * 2.0f));
+            pose.translate(0.0f, -pivot, 0.0f);
+        } else {
+            // standing on something: stays put, just rocks on its feet when it's hit
+            pose.mulPose(Axis.YP.rotationDegrees(180.0f - entity.getYRot()));
+            pose.mulPose(Axis.XP.rotationDegrees(knock * 0.5f));
         }
-        pose.mulPose(Axis.YP.rotationDegrees(180.0f - entity.getYRot() + Mth.sin(age * 0.021f) * 25.0f));
-        pose.mulPose(Axis.XP.rotationDegrees(sway));
-        pose.mulPose(Axis.ZP.rotationDegrees(Mth.cos(age * 0.05f) * 2.0f));
-        pose.translate(0.0f, -pivot, 0.0f);
 
         // the usual mob transform: model space has y down and feet at y = 24 px
         pose.scale(SCALE, SCALE, SCALE);

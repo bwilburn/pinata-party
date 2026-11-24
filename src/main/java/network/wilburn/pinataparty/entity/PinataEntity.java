@@ -58,6 +58,16 @@ public class PinataEntity extends Entity {
             SynchedEntityData.defineId(PinataEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_VARIANT =
             SynchedEntityData.defineId(PinataEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Integer> DATA_BEES =
+            SynchedEntityData.defineId(PinataEntity.class, EntityDataSerializers.INT);
+    private static final EntityDataAccessor<Boolean> DATA_HANGING =
+            SynchedEntityData.defineId(PinataEntity.class, EntityDataSerializers.BOOLEAN);
+
+    /**
+     * Set by the client mod class; called every client tick for a pinata with bees in it, to keep
+     * its buzzing sound playing. A plain field so this class never touches client-only code.
+     */
+    public static java.util.function.Consumer<PinataEntity> clientBuzzTicker = e -> {};
 
     private static final Vector3f[] CONFETTI = {
             new Vector3f(1.00f, 0.25f, 0.55f), // pink
@@ -69,7 +79,6 @@ public class PinataEntity extends Entity {
     };
 
     private final List<ItemStack> contents = new ArrayList<>();
-    private int bees;
     private float health = 20.0f;
     private float maxHealth = 20.0f;
 
@@ -85,6 +94,8 @@ public class PinataEntity extends Entity {
         builder.define(DATA_HURT_TIME, 0);
         builder.define(DATA_HURT_DIR, 1);
         builder.define(DATA_VARIANT, 0);
+        builder.define(DATA_BEES, 0);
+        builder.define(DATA_HANGING, false);
     }
 
     public int getHurtTime() {
@@ -97,6 +108,23 @@ public class PinataEntity extends Entity {
 
     public int getVariant() {
         return this.entityData.get(DATA_VARIANT);
+    }
+
+    public int getBees() {
+        return this.entityData.get(DATA_BEES);
+    }
+
+    private void setBees(int bees) {
+        this.entityData.set(DATA_BEES, Math.max(0, bees));
+    }
+
+    /** Hung from a block on a string (sways and turns), as opposed to standing on something. */
+    public boolean isHanging() {
+        return this.entityData.get(DATA_HANGING);
+    }
+
+    public void setHanging(boolean hanging) {
+        this.entityData.set(DATA_HANGING, hanging);
     }
 
     /** Called when a brand-new (never filled) pinata is placed. */
@@ -118,10 +146,9 @@ public class PinataEntity extends Entity {
             if (hurt > 0) {
                 this.entityData.set(DATA_HURT_TIME, hurt - 1);
             }
-            // muffled buzzing now and then when there are bees inside
-            if (this.bees > 0 && this.random.nextInt(80) == 0) {
-                this.playSound(SoundEvents.BEEHIVE_WORK, 0.6f, 0.9f + this.random.nextFloat() * 0.2f);
-            }
+        } else if (getBees() > 0) {
+            // the buzzing loop is a client-side sound that follows the pinata; see PinataBuzzSound
+            clientBuzzTicker.accept(this);
         }
     }
 
@@ -165,8 +192,8 @@ public class PinataEntity extends Entity {
         if (withBat) {
             this.playSound(SoundEvents.WOOD_HIT, 0.8f, pitch);
         }
-        if (this.bees > 0) {
-            this.playSound(SoundEvents.BEEHIVE_WORK, 1.0f, 1.3f);
+        if (getBees() > 0) {
+            this.playSound(SoundEvents.BEE_HURT, 0.4f + 0.05f * Math.min(getBees(), 12), 0.8f);
         }
         if (this.level() instanceof ServerLevel serverLevel) {
             Vec3 c = center();
@@ -194,14 +221,15 @@ public class PinataEntity extends Entity {
         for (Vector3f color : CONFETTI) {
             level.sendParticles(new DustParticleOptions(color, 1.5f), c.x, c.y, c.z, 18, 0.6, 0.6, 0.6, 0.0);
         }
-        level.sendParticles(ParticleTypes.FIREWORK, c.x, c.y, c.z, 30, 0.2, 0.2, 0.2, 0.2);
-        level.playSound(null, c.x, c.y, c.z, SoundEvents.FIREWORK_ROCKET_BLAST, SoundSource.NEUTRAL, 1.5f, 1.0f);
-        level.playSound(null, c.x, c.y, c.z, SoundEvents.FIREWORK_ROCKET_TWINKLE, SoundSource.NEUTRAL, 1.0f, 1.0f);
-        level.playSound(null, c.x, c.y, c.z, SoundEvents.WOOL_BREAK, SoundSource.NEUTRAL, 1.0f, 1.0f);
+        level.sendParticles(ParticleTypes.FIREWORK, c.x, c.y, c.z, 12, 0.2, 0.2, 0.2, 0.12);
+        // a papery tear and a little sparkle, nothing louder than the hits
+        level.playSound(null, c.x, c.y, c.z, SoundEvents.WOOL_BREAK, SoundSource.NEUTRAL, 1.0f, 0.9f);
+        level.playSound(null, c.x, c.y, c.z, SoundEvents.BOOK_PAGE_TURN, SoundSource.NEUTRAL, 1.0f, 0.7f);
+        level.playSound(null, c.x, c.y, c.z, SoundEvents.FIREWORK_ROCKET_TWINKLE_FAR, SoundSource.NEUTRAL, 0.35f, 1.2f);
 
         // the goodies
         List<ItemStack> drops = new ArrayList<>(this.contents);
-        if (drops.isEmpty() && this.bees == 0) {
+        if (drops.isEmpty() && getBees() == 0) {
             // an empty pinata still gives a little something
             drops.add(new ItemStack(Items.COOKIE, 3 + this.random.nextInt(4)));
         }
@@ -211,8 +239,8 @@ public class PinataEntity extends Entity {
         this.contents.clear();
 
         // the bees
-        int released = this.bees;
-        this.bees = 0;
+        int released = getBees();
+        setBees(0);
         releaseBees(level, c, released, breaker, Config.ANGRY_BEES.get());
 
         if (released > 0) {
@@ -262,9 +290,11 @@ public class PinataEntity extends Entity {
                 } else if (!targets.isEmpty()) {
                     target = targets.get(this.random.nextInt(targets.size()));
                 }
+                // always angry (red eyes, angry buzz); an angry bee with no target goes for
+                // the nearest survival player by itself
+                bee.setRemainingPersistentAngerTime(angerTicks);
                 if (target != null) {
                     bee.setPersistentAngerTarget(target.getUUID());
-                    bee.setRemainingPersistentAngerTime(angerTicks);
                     bee.setTarget(target);
                 }
             }
@@ -283,7 +313,7 @@ public class PinataEntity extends Entity {
         if (held.isEmpty() && player.isSecondaryUseActive()) {
             if (!client) {
                 ItemStack item = new ItemStack(PinataParty.PINATA.get());
-                if (!this.contents.isEmpty() || this.bees > 0) {
+                if (!this.contents.isEmpty() || getBees() > 0) {
                     item.set(DataComponents.CUSTOM_DATA, CustomData.of(saveFilling(this.level().registryAccess())));
                 }
                 if (!player.getInventory().add(item)) {
@@ -299,8 +329,8 @@ public class PinataEntity extends Entity {
         if (held.isEmpty()) {
             if (!client) {
                 player.displayClientMessage(Component.translatable("message.pinataparty.peek",
-                        this.contents.size(), this.bees), true);
-                this.playSound(this.bees > 0 ? SoundEvents.BEEHIVE_WORK : SoundEvents.WOOL_STEP, 1.0f, 1.0f);
+                        this.contents.size(), getBees()), true);
+                this.playSound(getBees() > 0 ? SoundEvents.BEEHIVE_WORK : SoundEvents.WOOL_STEP, 1.0f, 1.0f);
             }
             return InteractionResult.sidedSuccess(client);
         }
@@ -311,7 +341,7 @@ public class PinataEntity extends Entity {
             return InteractionResult.PASS;
         }
 
-        int beeRoom = Config.MAX_BEES.get() - this.bees;
+        int beeRoom = Config.MAX_BEES.get() - getBees();
 
         // a bottled bee
         if (held.is(PinataParty.BOTTLED_BEE.get())) {
@@ -319,7 +349,7 @@ public class PinataEntity extends Entity {
                 return full(player, client, "message.pinataparty.full_bees");
             }
             if (!client) {
-                this.bees++;
+                setBees(getBees() + 1);
                 player.setItemInHand(hand, ItemUtils.createFilledResult(held, player, new ItemStack(Items.GLASS_BOTTLE)));
                 this.playSound(SoundEvents.BEEHIVE_ENTER, 1.0f, 1.0f);
             }
@@ -332,7 +362,7 @@ public class PinataEntity extends Entity {
                 return full(player, client, "message.pinataparty.full_bees");
             }
             if (!client) {
-                this.bees++;
+                setBees(getBees() + 1);
                 if (!player.getAbilities().instabuild) {
                     held.shrink(1);
                 }
@@ -349,7 +379,7 @@ public class PinataEntity extends Entity {
             }
             if (!client) {
                 int moved = Math.min(beeRoom, occupants.size());
-                this.bees += moved;
+                setBees(getBees() + moved);
                 held.set(DataComponents.BEES, List.copyOf(occupants.subList(moved, occupants.size())));
                 this.playSound(SoundEvents.BEEHIVE_EXIT, 1.0f, 1.0f);
             }
@@ -388,7 +418,7 @@ public class PinataEntity extends Entity {
             }
         }
         tag.put(TAG_ITEMS, items);
-        tag.putInt(TAG_BEES, this.bees);
+        tag.putInt(TAG_BEES, getBees());
         tag.putInt(TAG_VARIANT, getVariant());
         tag.putFloat(TAG_HEALTH, this.health);
         tag.putFloat(TAG_MAX_HEALTH, this.maxHealth);
@@ -404,7 +434,7 @@ public class PinataEntity extends Entity {
                 this.contents.add(stack);
             }
         }
-        this.bees = tag.getInt(TAG_BEES);
+        setBees(tag.getInt(TAG_BEES));
         this.entityData.set(DATA_VARIANT, Mth.clamp(tag.getInt(TAG_VARIANT), 0, VARIANTS - 1));
         this.maxHealth = tag.contains(TAG_MAX_HEALTH) ? tag.getFloat(TAG_MAX_HEALTH) : 20.0f;
         this.health = tag.contains(TAG_HEALTH) ? tag.getFloat(TAG_HEALTH) : this.maxHealth;
@@ -416,11 +446,13 @@ public class PinataEntity extends Entity {
     @Override
     protected void addAdditionalSaveData(CompoundTag tag) {
         tag.put("Filling", saveFilling(this.level().registryAccess()));
+        tag.putBoolean("Hanging", isHanging());
     }
 
     @Override
     protected void readAdditionalSaveData(CompoundTag tag) {
         loadFilling(tag.getCompound("Filling"), this.level().registryAccess());
+        setHanging(tag.getBoolean("Hanging"));
     }
 
     @Override
