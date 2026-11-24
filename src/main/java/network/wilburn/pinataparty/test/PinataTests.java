@@ -193,6 +193,8 @@ public class PinataTests {
 
     @GameTest(template = "arena")
     public static void partyBeesKeepStinging(GameTestHelper helper) {
+        // mob damage to players is zero on Peaceful
+        helper.getLevel().getServer().setDifficulty(net.minecraft.world.Difficulty.NORMAL, true);
         ServerPlayer p = player(helper);
         Bee bee = helper.spawn(EntityType.BEE, new Vec3(1.5, 1.0, 2.0));
         bee.addTag(PinataEntity.PARTY_BEE_TAG);
@@ -203,7 +205,8 @@ public class PinataTests {
 
         float before = p.getHealth();
         bee.doHurtTarget(p);
-        helper.assertTrue(p.getHealth() < before, "the sting should hurt (" + before + " -> " + p.getHealth() + ")");
+        helper.assertTrue(p.getHealth() < before, "the sting should hurt (" + before + " -> " + p.getHealth()
+                + ", difficulty " + helper.getLevel().getDifficulty() + ")");
         helper.assertFalse(bee.hasStung(), "a party bee shouldn't lose its stinger");
         helper.assertTrue(bee.isAngry(), "a party bee should still be angry after stinging");
 
@@ -275,12 +278,14 @@ public class PinataTests {
 
     @GameTest(template = "arena")
     public static void partyBeesCantKill(GameTestHelper helper) {
+        helper.getLevel().getServer().setDifficulty(net.minecraft.world.Difficulty.HARD, true);
         ServerPlayer p = player(helper);
         p.setHealth(4.0f);
         Bee bee = helper.spawn(EntityType.BEE, new Vec3(2.5, 2.0, 2.5));
         bee.addTag(PinataEntity.PARTY_BEE_TAG);
         p.hurt(p.damageSources().sting(bee), 100.0f);
         helper.assertTrue(p.isAlive() && p.getHealth() >= 1.0f, "a party bee sting shouldn't kill, health " + p.getHealth());
+        helper.assertTrue(p.getHealth() < 4.0f, "but it should still hurt, health " + p.getHealth());
         helper.succeed();
     }
 }
