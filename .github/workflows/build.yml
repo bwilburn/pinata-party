@@ -2,6 +2,9 @@ name: Build
 
 on: [push, workflow_dispatch]
 
+permissions:
+  contents: write
+
 jobs:
   build:
     runs-on: ubuntu-latest
@@ -12,9 +15,49 @@ jobs:
           java-version: '21'
           distribution: 'temurin'
       - uses: gradle/actions/setup-gradle@v4
-      - name: Build with Gradle
+
+      - name: Build
         run: ./gradlew build --no-configuration-cache
+
+      - name: Game tests (dedicated server)
+        run: ./gradlew runGameTestServer --no-configuration-cache
+
+      - name: Boot the client headless and check the log
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq xvfb libgl1-mesa-dri mesa-utils > /dev/null
+          set +e
+          timeout 420 xvfb-run -a -s "-screen 0 1280x720x24" ./gradlew runClient --no-configuration-cache > client.out 2>&1
+          code=$?
+          set -e
+          echo "client exit code: $code (124 = still running when stopped, i.e. no crash)"
+          tail -40 client.out
+          log=run/logs/latest.log
+          test -f "$log"
+          grep -iE "pinataparty" "$log" | grep -iE "error|exception|missing|unable|failed" > problems.txt || true
+          grep -iE "Reloading ResourceManager|Created: .*atlas" "$log" | head -5
+          if [ -s problems.txt ]; then echo "PROBLEMS:"; cat problems.txt; exit 1; fi
+          if [ "$code" != "124" ]; then echo "client did not survive startup"; exit 1; fi
+          echo "client booted with no pinataparty errors"
+
       - uses: actions/upload-artifact@v4
+        if: always()
         with:
-          name: pinataparty-jar
-          path: build/libs/*.jar
+          name: logs
+          path: |
+            client.out
+            run/logs/
+            run/crash-reports/
+            runs/
+
+      - name: Publish the jar to the dist branch
+        if: github.ref == 'refs/heads/main'
+        run: |
+          mkdir -p /tmp/dist && cp build/libs/*.jar /tmp/dist/
+          cd /tmp/dist
+          git init -q -b dist
+          git config user.name "github-actions"
+          git config user.email "github-actions@users.noreply.github.com"
+          git add -A
+          git commit -q -m "Jar from ${GITHUB_SHA::10}"
+          git push -f "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}" dist

@@ -25,6 +25,7 @@ import net.neoforged.fml.ModContainer;
 import net.neoforged.fml.common.Mod;
 import net.neoforged.fml.config.ModConfig;
 import net.neoforged.neoforge.common.NeoForge;
+import net.neoforged.neoforge.event.RegisterGameTestsEvent;
 import net.neoforged.neoforge.registries.DeferredHolder;
 import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
@@ -33,6 +34,7 @@ import network.wilburn.pinataparty.entity.PinataEntity;
 import network.wilburn.pinataparty.item.BottledBeeItem;
 import network.wilburn.pinataparty.item.PinataBatItem;
 import network.wilburn.pinataparty.item.PinataItem;
+import network.wilburn.pinataparty.test.PinataTests;
 
 @Mod(PinataParty.MODID)
 public class PinataParty {
@@ -115,5 +117,6 @@ public class PinataParty {
         container.registerConfig(ModConfig.Type.SERVER, Config.SPEC);
 
         NeoForge.EVENT_BUS.register(GameEvents.class);
+        modBus.addListener(RegisterGameTestsEvent.class, event -> event.register(PinataTests.class));
     }
 }
