@@ -1,0 +1,11 @@
+{
+  "type": "minecraft:crafting_shaped",
+  "category": "misc",
+  "pattern": [" S ", "WPW", "W W"],
+  "key": {
+    "S": { "item": "minecraft:string" },
+    "P": { "item": "minecraft:paper" },
+    "W": { "tag": "minecraft:wool" }
+  },
+  "result": { "id": "pinataparty:pinata", "count": 1 }
+}
