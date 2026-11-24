@@ -41,5 +41,5 @@ It goes on the **server and every client**: it adds an entity and items, so a cl
 
 ## Building
 GitHub Actions builds every push; the jar is the `pinataparty-jar` artifact on the run.
-Locally: JDK 21, then `./gradlew build` → `build/libs/pinataparty-1.0.0.jar`.
+Locally: JDK 21, then `./gradlew build` → `build/libs/pinataparty-1.0.1.jar`.
 Textures are drawn by `tools/make_textures.py` (Pillow); edit the palettes or pixel art there and re-run it.
