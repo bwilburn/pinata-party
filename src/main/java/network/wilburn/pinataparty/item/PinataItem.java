@@ -101,11 +101,10 @@ public class PinataItem extends Item {
             return;
         }
         CompoundTag tag = data.copyTag();
-        int stacks = tag.getList(PinataEntity.TAG_ITEMS, 10).size();
-        int bees = tag.getInt(PinataEntity.TAG_BEES);
-        tooltip.add(Component.translatable("item.pinataparty.pinata.tooltip.filled", stacks, bees)
-                .withStyle(ChatFormatting.GOLD));
-        if (bees > 0) {
+        tooltip.add(PinataEntity.describeFilling(tag, context.registries()).copy().withStyle(ChatFormatting.GOLD));
+        if (tag.getList(PinataEntity.TAG_CRITTERS, 10).stream()
+                .anyMatch(t -> t instanceof CompoundTag c && network.wilburn.pinataparty.entity.CritterData.isBee(c))
+                || tag.getInt(PinataEntity.TAG_BEES_OLD) > 0) {
             tooltip.add(Component.translatable("item.pinataparty.pinata.tooltip.buzzing")
                     .withStyle(ChatFormatting.YELLOW, ChatFormatting.ITALIC));
         }

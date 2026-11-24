@@ -25,6 +25,7 @@ public class PinataPartyClient {
         modBus.addListener(PinataPartyClient::registerRenderers);
         modBus.addListener(PinataPartyClient::registerLayers);
         modBus.addListener(PinataPartyClient::registerGuiLayers);
+        modBus.addListener(PinataPartyClient::clientSetup);
     }
 
     /** Start (or restart, if the sound engine dropped it) the buzz for a pinata with bees in it. */
@@ -42,7 +43,15 @@ public class PinataPartyClient {
         }
     }
 
-    private static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
+    /** Bottled Critter icons switch on the "pinataparty:critter" model property. */
+    private static void clientSetup(net.neoforged.fml.event.lifecycle.FMLClientSetupEvent event) {
+        event.enqueueWork(() -> net.minecraft.client.renderer.item.ItemProperties.register(
+                PinataParty.BOTTLED_CRITTER.get(), PinataParty.id("critter"),
+                (net.minecraft.client.renderer.item.ItemPropertyFunction) (stack, level, entity, seed) ->
+                        network.wilburn.pinataparty.item.BottledCritterItem.iconIndex(stack)));
+    }
+
+        private static void registerRenderers(EntityRenderersEvent.RegisterRenderers event) {
         event.registerEntityRenderer(PinataParty.PINATA_ENTITY.get(), PinataRenderer::new);
     }
 

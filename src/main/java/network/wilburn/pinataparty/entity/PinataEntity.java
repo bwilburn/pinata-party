@@ -1,7 +1,9 @@
 package network.wilburn.pinataparty.entity;
 
 import java.util.ArrayList;
+import java.util.LinkedHashMap;
 import java.util.List;
+import java.util.Map;
 
 import org.joml.Vector3f;
 
@@ -13,6 +15,7 @@ import net.minecraft.nbt.CompoundTag;
 import net.minecraft.nbt.ListTag;
 import net.minecraft.nbt.Tag;
 import net.minecraft.network.chat.Component;
+import net.minecraft.network.chat.MutableComponent;
 import net.minecraft.network.syncher.EntityDataAccessor;
 import net.minecraft.network.syncher.EntityDataSerializers;
 import net.minecraft.network.syncher.SynchedEntityData;
@@ -26,32 +29,34 @@ import net.minecraft.world.damagesource.DamageSource;
 import net.minecraft.world.entity.Entity;
 import net.minecraft.world.entity.EntityType;
 import net.minecraft.world.entity.EquipmentSlot;
+import net.minecraft.world.entity.LivingEntity;
 import net.minecraft.world.entity.animal.Bee;
+import net.minecraft.world.entity.animal.Chicken;
+import net.minecraft.world.entity.animal.Rabbit;
 import net.minecraft.world.entity.item.ItemEntity;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import net.minecraft.world.item.ItemUtils;
 import net.minecraft.world.item.Items;
+import net.minecraft.world.item.SpawnEggItem;
 import net.minecraft.world.item.component.CustomData;
 import net.minecraft.world.level.Level;
 import net.minecraft.world.level.block.entity.BeehiveBlockEntity;
 import net.minecraft.world.phys.Vec3;
 
 import network.wilburn.pinataparty.Config;
+import network.wilburn.pinataparty.PartyFireworks;
 import network.wilburn.pinataparty.PinataParty;
+import network.wilburn.pinataparty.item.BottledCritterItem;
 
 public class PinataEntity extends Entity {
     public static final String TAG_ITEMS = "Items";
-    public static final String TAG_BEES = "Bees";
+    public static final String TAG_CRITTERS = "Critters";
+    /** Old saves (1.0.x) kept only a bee count. */
+    public static final String TAG_BEES_OLD = "Bees";
     public static final String TAG_VARIANT = "Variant";
     public static final String TAG_HEALTH = "Health";
     public static final String TAG_MAX_HEALTH = "MaxHealth";
-
-    /** Scoreboard tag put on bees that came out of a pinata. */
-    public static final String PARTY_BEE_TAG = "pinataparty.party_bee";
-    /** Persistent-data keys on party bees: game time their anger ends, and when they fly off. */
-    public static final String ANGRY_UNTIL = "pinataparty.angry_until";
-    public static final String LEAVE_AT = "pinataparty.leave_at";
 
     public static final int VARIANTS = 3;
 
@@ -61,6 +66,7 @@ public class PinataEntity extends Entity {
             SynchedEntityData.defineId(PinataEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Integer> DATA_VARIANT =
             SynchedEntityData.defineId(PinataEntity.class, EntityDataSerializers.INT);
+    /** Bees only, for the buzzing sound on clients. */
     private static final EntityDataAccessor<Integer> DATA_BEES =
             SynchedEntityData.defineId(PinataEntity.class, EntityDataSerializers.INT);
     private static final EntityDataAccessor<Boolean> DATA_HANGING =
@@ -82,6 +88,8 @@ public class PinataEntity extends Entity {
     };
 
     private final List<ItemStack> contents = new ArrayList<>();
+    /** Each critter's saved data (see CritterData). */
+    private final List<CompoundTag> critters = new ArrayList<>();
     private float health = 20.0f;
     private float maxHealth = 20.0f;
 
@@ -113,12 +121,28 @@ public class PinataEntity extends Entity {
         return this.entityData.get(DATA_VARIANT);
     }
 
+    /** Bees inside (synced to clients). */
     public int getBees() {
         return this.entityData.get(DATA_BEES);
     }
 
-    private void setBees(int bees) {
-        this.entityData.set(DATA_BEES, Math.max(0, bees));
+    /** All critters inside (server side). */
+    public int getCritterCount() {
+        return this.critters.size();
+    }
+
+    public List<CompoundTag> getCritters() {
+        return List.copyOf(this.critters);
+    }
+
+    private void critterChanged() {
+        int bees = 0;
+        for (CompoundTag c : this.critters) {
+            if (CritterData.isBee(c)) {
+                bees++;
+            }
+        }
+        this.entityData.set(DATA_BEES, bees);
     }
 
     /** Hung from a block on a string (sways and turns), as opposed to standing on something. */
@@ -220,29 +244,45 @@ public class PinataEntity extends Entity {
         }
         Vec3 c = center();
 
-        // confetti and a bang
+        // confetti and a papery pop, nothing louder than the hits
         for (Vector3f color : CONFETTI) {
             level.sendParticles(new DustParticleOptions(color, 1.5f), c.x, c.y, c.z, 18, 0.6, 0.6, 0.6, 0.0);
         }
         level.sendParticles(ParticleTypes.FIREWORK, c.x, c.y, c.z, 12, 0.2, 0.2, 0.2, 0.12);
-        // a papery tear and a little sparkle, nothing louder than the hits
         level.playSound(null, c.x, c.y, c.z, SoundEvents.WOOL_BREAK, SoundSource.NEUTRAL, 1.0f, 0.9f);
         level.playSound(null, c.x, c.y, c.z, SoundEvents.BOOK_PAGE_TURN, SoundSource.NEUTRAL, 1.0f, 0.7f);
         level.playSound(null, c.x, c.y, c.z, SoundEvents.FIREWORK_ROCKET_TWINKLE_FAR, SoundSource.NEUTRAL, 0.35f, 1.2f);
 
-        // the goodies
+        // the goodies: rockets go up (up to the limit), everything else flies out
+        int maxRockets = Config.MAX_FIREWORKS.get();
+        int rocketsLeft = maxRockets;
+        int launch = 0;
         for (ItemStack stack : this.contents) {
-            spawnItem(level, c, stack, 0.25);
+            if (stack.is(Items.FIREWORK_ROCKET) && rocketsLeft > 0) {
+                int n = Math.min(stack.getCount(), rocketsLeft);
+                for (int i = 0; i < n; i++) {
+                    // spread the launches over about a second
+                    PartyFireworks.queue(level, c, stack.copyWithCount(1), launch * 20 / Math.max(1, maxRockets));
+                    launch++;
+                }
+                rocketsLeft -= n;
+                if (stack.getCount() > n) {
+                    spawnItem(level, c, stack.copyWithCount(stack.getCount() - n), 0.25);
+                }
+            } else {
+                spawnItem(level, c, stack, 0.25);
+            }
         }
         this.contents.clear();
 
-        // the bees
-        int released = getBees();
-        setBees(0);
-        releaseBees(level, c, released, breaker, Config.ANGRY_BEES.get());
+        // the critters
+        List<CompoundTag> released = new ArrayList<>(this.critters);
+        this.critters.clear();
+        critterChanged();
+        int bees = releaseCritters(level, c, released, breaker);
 
-        if (released > 0) {
-            Component msg = Component.translatable("message.pinataparty.bees", breaker.getDisplayName(), released);
+        if (bees > 0) {
+            Component msg = Component.translatable("message.pinataparty.bees", breaker.getDisplayName(), bees);
             for (Player p : level.getEntitiesOfClass(Player.class, this.getBoundingBox().inflate(24.0))) {
                 p.displayClientMessage(msg, true);
             }
@@ -260,51 +300,65 @@ public class PinataEntity extends Entity {
         level.addFreshEntity(item);
     }
 
-    private void releaseBees(ServerLevel level, Vec3 c, int count, Player breaker, boolean angry) {
-        if (count <= 0) {
-            return;
+    /** Lets every critter out. Returns how many were bees. */
+    private int releaseCritters(ServerLevel level, Vec3 c, List<CompoundTag> released, Player breaker) {
+        if (released.isEmpty()) {
+            return 0;
         }
         List<Player> targets = level.getEntitiesOfClass(Player.class, this.getBoundingBox().inflate(10.0),
                 p -> p.isAlive() && !p.isSpectator() && !p.getAbilities().instabuild);
+        boolean angry = Config.ANGRY_BEES.get();
         boolean breakerOnly = Config.BEE_TARGETS.get() == Config.BeeTargets.BREAKER;
         int angerTicks = Config.BEE_ANGER_SECONDS.get() * 20;
-        int leaveSeconds = Config.BEES_LEAVE_AFTER_SECONDS.get();
+        int leaveSeconds = Config.CRITTERS_LEAVE_AFTER_SECONDS.get();
         long now = level.getGameTime();
+        int bees = 0;
 
-        for (int i = 0; i < count; i++) {
-            Bee bee = EntityType.BEE.create(level);
-            if (bee == null) {
+        for (CompoundTag critter : released) {
+            var made = CritterData.create(level, critter,
+                    c.x + (this.random.nextDouble() - 0.5) * 0.6, c.y, c.z + (this.random.nextDouble() - 0.5) * 0.6,
+                    this.random.nextFloat() * 360.0f);
+            if (made.isEmpty()) {
                 continue;
             }
-            bee.moveTo(c.x + (this.random.nextDouble() - 0.5) * 0.6, c.y, c.z + (this.random.nextDouble() - 0.5) * 0.6,
-                    this.random.nextFloat() * 360.0f, 0.0f);
-            bee.setDeltaMovement(this.random.nextGaussian() * 0.2, 0.15, this.random.nextGaussian() * 0.2);
-            bee.addTag(PARTY_BEE_TAG);
-            // GameEvents keeps the bee angry (and stinging) until then, then sends it off
-            bee.getPersistentData().putLong(ANGRY_UNTIL, angry ? now + angerTicks : now);
-            if (leaveSeconds > 0) {
-                bee.getPersistentData().putLong(LEAVE_AT, now + (angry ? angerTicks : 0) + leaveSeconds * 20L);
+            Entity e = made.get();
+            e.setDeltaMovement(this.random.nextGaussian() * 0.25, 0.2 + this.random.nextDouble() * 0.15,
+                    this.random.nextGaussian() * 0.25);
+            e.addTag(CritterData.PARTY_TAG);
+            var data = e.getPersistentData();
+
+            if (e instanceof Bee bee) {
+                bees++;
+                data.putLong(CritterData.ANGRY_UNTIL, angry ? now + angerTicks : now);
+                if (angry) {
+                    Player target = null;
+                    if (breakerOnly) {
+                        if (targets.contains(breaker)) {
+                            target = breaker;
+                        }
+                    } else if (!targets.isEmpty()) {
+                        target = targets.get(this.random.nextInt(targets.size()));
+                    }
+                    // always angry (red eyes, angry buzz); an angry bee with no target goes for
+                    // the nearest survival player by itself
+                    bee.setRemainingPersistentAngerTime(angerTicks);
+                    if (target != null) {
+                        bee.setPersistentAngerTarget(target.getUUID());
+                        bee.setTarget(target);
+                    }
+                }
+            } else if ((e instanceof Chicken || e instanceof Rabbit) && e instanceof LivingEntity scared) {
+                // run around in a panic for a bit
+                scared.setLastHurtByMob(breaker);
             }
 
-            if (angry) {
-                Player target = null;
-                if (breakerOnly) {
-                    if (targets.contains(breaker)) {
-                        target = breaker;
-                    }
-                } else if (!targets.isEmpty()) {
-                    target = targets.get(this.random.nextInt(targets.size()));
-                }
-                // always angry (red eyes, angry buzz); an angry bee with no target goes for
-                // the nearest survival player by itself
-                bee.setRemainingPersistentAngerTime(angerTicks);
-                if (target != null) {
-                    bee.setPersistentAngerTarget(target.getUUID());
-                    bee.setTarget(target);
-                }
+            if (leaveSeconds > 0 && e.getType().is(CritterData.LEAVES_AFTER_PARTY)) {
+                long angryFor = (e instanceof Bee && angry) ? angerTicks : 0;
+                data.putLong(CritterData.LEAVE_AT, now + angryFor + leaveSeconds * 20L);
             }
-            level.addFreshEntity(bee);
+            level.addFreshEntity(e);
         }
+        return bees;
     }
 
     // --- filling it (right-click) ------------------------------------------
@@ -318,7 +372,7 @@ public class PinataEntity extends Entity {
         if (held.isEmpty() && player.isSecondaryUseActive()) {
             if (!client) {
                 ItemStack item = new ItemStack(PinataParty.PINATA.get());
-                if (!this.contents.isEmpty() || getBees() > 0) {
+                if (!this.contents.isEmpty() || !this.critters.isEmpty()) {
                     item.set(DataComponents.CUSTOM_DATA, CustomData.of(saveFilling(this.level().registryAccess())));
                 }
                 if (!player.getInventory().add(item)) {
@@ -330,7 +384,7 @@ public class PinataEntity extends Entity {
             return InteractionResult.sidedSuccess(client);
         }
 
-        // empty hand: give it a squeeze and guess what's inside
+        // empty hand: give it a squeeze and see how full it is
         if (held.isEmpty()) {
             if (!client) {
                 showFill(player);
@@ -345,29 +399,35 @@ public class PinataEntity extends Entity {
             return InteractionResult.PASS;
         }
 
-        int beeRoom = Config.MAX_BEES.get() - getBees();
+        int room = Config.MAX_CRITTERS.get() - this.critters.size();
 
-        // a bottled bee
+        // a bottled critter (or an old Bottled Bee)
+        CompoundTag bottled = null;
         if (held.is(PinataParty.BOTTLED_BEE.get())) {
-            if (beeRoom <= 0) {
-                return full(player, client, "message.pinataparty.full_bees");
+            bottled = CritterData.ofType(EntityType.BEE);
+        } else if (held.is(PinataParty.BOTTLED_CRITTER.get())) {
+            bottled = BottledCritterItem.critter(held);
+        }
+        if (bottled != null) {
+            if (room <= 0) {
+                return full(player, client, "message.pinataparty.full_critters");
             }
             if (!client) {
-                setBees(getBees() + 1);
+                addCritter(bottled);
                 player.setItemInHand(hand, ItemUtils.createFilledResult(held, player, new ItemStack(Items.GLASS_BOTTLE)));
-                this.playSound(SoundEvents.BEEHIVE_ENTER, 1.0f, 1.0f);
+                this.playSound(SoundEvents.BOTTLE_EMPTY, 1.0f, 1.0f);
                 showFill(player);
             }
             return InteractionResult.sidedSuccess(client);
         }
 
-        // a bee spawn egg (creative)
-        if (held.is(Items.BEE_SPAWN_EGG)) {
-            if (beeRoom <= 0) {
-                return full(player, client, "message.pinataparty.full_bees");
+        // a spawn egg for a bottleable mob (creative)
+        if (held.getItem() instanceof SpawnEggItem egg && egg.getType(held).is(CritterData.BOTTLEABLE)) {
+            if (room <= 0) {
+                return full(player, client, "message.pinataparty.full_critters");
             }
             if (!client) {
-                setBees(getBees() + 1);
+                addCritter(CritterData.ofType(egg.getType(held)));
                 if (!player.getAbilities().instabuild) {
                     held.shrink(1);
                 }
@@ -380,12 +440,14 @@ public class PinataEntity extends Entity {
         // a bee nest or beehive picked up with Silk Touch, bees and all
         List<BeehiveBlockEntity.Occupant> occupants = held.get(DataComponents.BEES);
         if (occupants != null && !occupants.isEmpty()) {
-            if (beeRoom <= 0) {
-                return full(player, client, "message.pinataparty.full_bees");
+            if (room <= 0) {
+                return full(player, client, "message.pinataparty.full_critters");
             }
             if (!client) {
-                int moved = Math.min(beeRoom, occupants.size());
-                setBees(getBees() + moved);
+                int moved = Math.min(room, occupants.size());
+                for (int i = 0; i < moved; i++) {
+                    addCritter(CritterData.ofBeeOccupant(occupants.get(i).entityData().copyTag()));
+                }
                 held.set(DataComponents.BEES, List.copyOf(occupants.subList(moved, occupants.size())));
                 this.playSound(SoundEvents.BEEHIVE_EXIT, 1.0f, 1.0f);
                 showFill(player);
@@ -408,14 +470,53 @@ public class PinataEntity extends Entity {
         return InteractionResult.sidedSuccess(client);
     }
 
+    private void addCritter(CompoundTag critter) {
+        this.critters.add(critter);
+        critterChanged();
+    }
+
     /** Action-bar line: how full this pinata is, against the server's limits. */
     private void showFill(Player player) {
+        player.displayClientMessage(fillLine(this.contents, this.critters), true);
+    }
+
+    /** "Piñata: 5/27 stacks (214 items), 3/12 critters: 2 Bee, 1 Chicken" */
+    public static Component fillLine(List<ItemStack> contents, List<CompoundTag> critters) {
         int items = 0;
-        for (ItemStack stack : this.contents) {
+        for (ItemStack stack : contents) {
             items += stack.getCount();
         }
-        player.displayClientMessage(Component.translatable("message.pinataparty.fill",
-                this.contents.size(), Config.MAX_STACKS.get(), items, getBees(), Config.MAX_BEES.get()), true);
+        MutableComponent line = Component.translatable("message.pinataparty.fill",
+                contents.size(), Config.maxStacks(), items, critters.size(), Config.maxCritters());
+        Component breakdown = critterBreakdown(critters);
+        if (breakdown != null) {
+            line.append(": ").append(breakdown);
+        }
+        return line;
+    }
+
+    /** "2 Bee, 1 Chicken", or null when there are none. */
+    public static Component critterBreakdown(List<CompoundTag> critters) {
+        if (critters.isEmpty()) {
+            return null;
+        }
+        Map<String, Integer> counts = new LinkedHashMap<>();
+        Map<String, Component> names = new LinkedHashMap<>();
+        for (CompoundTag c : critters) {
+            String id = CritterData.typeId(c).toString();
+            counts.merge(id, 1, Integer::sum);
+            names.putIfAbsent(id, CritterData.typeName(c));
+        }
+        MutableComponent out = Component.empty();
+        boolean first = true;
+        for (var entry : counts.entrySet()) {
+            if (!first) {
+                out.append(", ");
+            }
+            out.append(entry.getValue() + " ").append(names.get(entry.getKey()));
+            first = false;
+        }
+        return out;
     }
 
     private InteractionResult full(Player player, boolean client, String key) {
@@ -436,7 +537,11 @@ public class PinataEntity extends Entity {
             }
         }
         tag.put(TAG_ITEMS, items);
-        tag.putInt(TAG_BEES, getBees());
+        ListTag critterList = new ListTag();
+        for (CompoundTag c : this.critters) {
+            critterList.add(c.copy());
+        }
+        tag.put(TAG_CRITTERS, critterList);
         tag.putInt(TAG_VARIANT, getVariant());
         tag.putFloat(TAG_HEALTH, this.health);
         tag.putFloat(TAG_MAX_HEALTH, this.maxHealth);
@@ -452,13 +557,43 @@ public class PinataEntity extends Entity {
                 this.contents.add(stack);
             }
         }
-        setBees(tag.getInt(TAG_BEES));
+        this.critters.clear();
+        ListTag critterList = tag.getList(TAG_CRITTERS, Tag.TAG_COMPOUND);
+        for (int i = 0; i < critterList.size(); i++) {
+            this.critters.add(critterList.getCompound(i).copy());
+        }
+        // 1.0.x saves: just a number of bees
+        for (int i = 0; i < tag.getInt(TAG_BEES_OLD); i++) {
+            this.critters.add(CritterData.ofType(EntityType.BEE));
+        }
+        critterChanged();
         this.entityData.set(DATA_VARIANT, Mth.clamp(tag.getInt(TAG_VARIANT), 0, VARIANTS - 1));
         this.maxHealth = tag.contains(TAG_MAX_HEALTH) ? tag.getFloat(TAG_MAX_HEALTH) : 20.0f;
         this.health = tag.contains(TAG_HEALTH) ? tag.getFloat(TAG_HEALTH) : this.maxHealth;
         if (this.health <= 0.0f) {
             this.health = this.maxHealth;
         }
+    }
+
+    /** Describes a saved filling (the pinata item's tooltip), in the same words as the readout. */
+    public static Component describeFilling(CompoundTag tag, HolderLookup.Provider registries) {
+        List<ItemStack> contents = new ArrayList<>();
+        ListTag items = tag.getList(TAG_ITEMS, Tag.TAG_COMPOUND);
+        for (int i = 0; i < items.size(); i++) {
+            ItemStack stack = registries != null ? ItemStack.parseOptional(registries, items.getCompound(i)) : ItemStack.EMPTY;
+            if (!stack.isEmpty()) {
+                contents.add(stack);
+            }
+        }
+        List<CompoundTag> critters = new ArrayList<>();
+        ListTag critterList = tag.getList(TAG_CRITTERS, Tag.TAG_COMPOUND);
+        for (int i = 0; i < critterList.size(); i++) {
+            critters.add(critterList.getCompound(i));
+        }
+        for (int i = 0; i < tag.getInt(TAG_BEES_OLD); i++) {
+            critters.add(CritterData.ofType(EntityType.BEE));
+        }
+        return fillLine(contents, critters);
     }
 
     @Override

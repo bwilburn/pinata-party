@@ -2,7 +2,10 @@
 """Draws every texture in the mod. Run from the project root:  python3 tools/make_textures.py
 Needs Pillow. Writes into src/main/resources/assets/pinataparty/textures/."""
 from pathlib import Path
+import sys
 from PIL import Image
+
+sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 ROOT = Path(__file__).resolve().parent.parent / "src/main/resources/assets/pinataparty/textures"
 
@@ -205,7 +208,12 @@ def main():
     from_art(PINATA_ICON, PINATA_KEY).save(ROOT / "item/pinata.png")
     from_art(BAT_ICON, BAT_KEY).save(ROOT / "item/pinata_bat.png")
     from_art(BLINDFOLD_ICON, BLINDFOLD_KEY).save(ROOT / "item/blindfold.png")
-    from_art(BOTTLE_ICON, BOTTLE_KEY).save(ROOT / "item/bottled_bee.png")
+    # bottled critters: one shared bottle, see critter_icons.py
+    import critter_icons
+    for name in critter_icons.CRITTERS:
+        critter_icons.critter_icon(name, hexc, Image).save(ROOT / f"item/bottled_critter_{name}.png")
+    critter_icons.generic_icon(hexc, Image).save(ROOT / "item/bottled_critter.png")
+    critter_icons.critter_icon("bee", hexc, Image).save(ROOT / "item/bottled_bee.png")
     blindfold_armor().save(ROOT / "models/armor/blindfold_layer_1.png")
     print("textures written to", ROOT)
 

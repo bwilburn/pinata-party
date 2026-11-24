@@ -8,6 +8,7 @@ import org.slf4j.Logger;
 
 import net.minecraft.Util;
 import net.minecraft.core.registries.Registries;
+import net.minecraft.nbt.CompoundTag;
 import net.minecraft.network.chat.Component;
 import net.minecraft.resources.ResourceLocation;
 import net.minecraft.sounds.SoundEvents;
@@ -31,7 +32,9 @@ import net.neoforged.neoforge.registries.DeferredItem;
 import net.neoforged.neoforge.registries.DeferredRegister;
 
 import network.wilburn.pinataparty.entity.PinataEntity;
+import network.wilburn.pinataparty.entity.CritterData;
 import network.wilburn.pinataparty.item.BottledBeeItem;
+import network.wilburn.pinataparty.item.BottledCritterItem;
 import network.wilburn.pinataparty.item.PinataBatItem;
 import network.wilburn.pinataparty.item.PinataItem;
 import network.wilburn.pinataparty.test.PinataTests;
@@ -92,8 +95,12 @@ public class PinataParty {
     public static final DeferredItem<ArmorItem> BLINDFOLD = ITEMS.register("blindfold",
             () -> new ArmorItem(BLINDFOLD_MATERIAL, ArmorItem.Type.HELMET, new Item.Properties().stacksTo(1)));
 
+    /** Kept so 1.0.x Bottled Bees still work; new bottles are Bottled Critters. Not in the creative tab. */
     public static final DeferredItem<BottledBeeItem> BOTTLED_BEE = ITEMS.register("bottled_bee",
             () -> new BottledBeeItem(new Item.Properties().stacksTo(16)));
+
+    public static final DeferredItem<BottledCritterItem> BOTTLED_CRITTER = ITEMS.register("bottled_critter",
+            () -> new BottledCritterItem(new Item.Properties().stacksTo(16)));
 
     public static final DeferredHolder<CreativeModeTab, CreativeModeTab> TAB = CREATIVE_TABS.register("pinataparty",
             () -> CreativeModeTab.builder()
@@ -104,7 +111,16 @@ public class PinataParty {
                         output.accept(PINATA.get());
                         output.accept(PINATA_BAT.get());
                         output.accept(BLINDFOLD.get());
-                        output.accept(BOTTLED_BEE.get());
+                        for (var type : java.util.List.of(net.minecraft.world.entity.EntityType.BEE,
+                                net.minecraft.world.entity.EntityType.CHICKEN, net.minecraft.world.entity.EntityType.RABBIT,
+                                net.minecraft.world.entity.EntityType.BAT, net.minecraft.world.entity.EntityType.FROG,
+                                net.minecraft.world.entity.EntityType.SLIME, net.minecraft.world.entity.EntityType.SILVERFISH)) {
+                            CompoundTag critter = CritterData.ofType(type);
+                            if (type == net.minecraft.world.entity.EntityType.SLIME) {
+                                critter.putInt("Size", 0); // the smallest slime
+                            }
+                            output.accept(BottledCritterItem.of(critter));
+                        }
                     })
                     .build());
 
@@ -117,6 +133,7 @@ public class PinataParty {
         container.registerConfig(ModConfig.Type.SERVER, Config.SPEC);
 
         NeoForge.EVENT_BUS.register(GameEvents.class);
+        NeoForge.EVENT_BUS.register(PartyFireworks.class);
         modBus.addListener(RegisterGameTestsEvent.class, event -> event.register(PinataTests.class));
     }
 }

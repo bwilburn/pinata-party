@@ -1,0 +1,50 @@
+{
+  "parent": "minecraft:item/generated",
+  "textures": {
+    "layer0": "pinataparty:item/bottled_critter"
+  },
+  "overrides": [
+    {
+      "predicate": {
+        "pinataparty:critter": 0.1
+      },
+      "model": "pinataparty:item/bottled_critter_bee"
+    },
+    {
+      "predicate": {
+        "pinataparty:critter": 0.2
+      },
+      "model": "pinataparty:item/bottled_critter_chicken"
+    },
+    {
+      "predicate": {
+        "pinataparty:critter": 0.3
+      },
+      "model": "pinataparty:item/bottled_critter_rabbit"
+    },
+    {
+      "predicate": {
+        "pinataparty:critter": 0.4
+      },
+      "model": "pinataparty:item/bottled_critter_bat"
+    },
+    {
+      "predicate": {
+        "pinataparty:critter": 0.5
+      },
+      "model": "pinataparty:item/bottled_critter_frog"
+    },
+    {
+      "predicate": {
+        "pinataparty:critter": 0.6
+      },
+      "model": "pinataparty:item/bottled_critter_slime"
+    },
+    {
+      "predicate": {
+        "pinataparty:critter": 0.7
+      },
+      "model": "pinataparty:item/bottled_critter_silverfish"
+    }
+  ]
+}

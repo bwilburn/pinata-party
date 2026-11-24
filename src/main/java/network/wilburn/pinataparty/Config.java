@@ -29,17 +29,18 @@ public final class Config {
             .comment("How long released bees stay angry.")
             .defineInRange("beeAngerSeconds", 15, 1, 120);
 
-    public static final ModConfigSpec.IntValue BEES_LEAVE_AFTER_SECONDS = BUILDER
-            .comment("Seconds after they calm down before pinata bees fly off for good (0 = they stay as ordinary bees).")
-            .defineInRange("beesLeaveAfterSeconds", 20, 0, 600);
+    public static final ModConfigSpec.IntValue CRITTERS_LEAVE_AFTER_SECONDS = BUILDER
+            .comment("Seconds after they calm down before pinata bees, bats and silverfish leave for good",
+                    "(0 = they stay). Which kinds leave is the entity tag pinataparty:leaves_after_party.")
+            .defineInRange("leaveAfterSeconds", 20, 0, 600);
 
-    public static final ModConfigSpec.BooleanValue PARTY_BEES_CAN_KILL = BUILDER
-            .comment("If false, a sting from a pinata bee never takes a player below half a heart.")
-            .define("partyBeesCanKill", false);
+    public static final ModConfigSpec.BooleanValue PARTY_CRITTERS_CAN_KILL = BUILDER
+            .comment("If false, nothing that came out of a pinata can take a player below half a heart.")
+            .define("partyCrittersCanKill", false);
 
-    public static final ModConfigSpec.IntValue MAX_BEES = BUILDER
-            .comment("Most bees one pinata can hold.")
-            .defineInRange("maxBees", 12, 0, 64);
+    public static final ModConfigSpec.IntValue MAX_CRITTERS = BUILDER
+            .comment("Most critters (bees, chickens, ...) one pinata can hold, all kinds together.")
+            .defineInRange("maxCritters", 12, 0, 64);
 
     static {
         BUILDER.pop();
@@ -49,6 +50,10 @@ public final class Config {
     public static final ModConfigSpec.IntValue MAX_STACKS = BUILDER
             .comment("Most item stacks one pinata can hold.")
             .defineInRange("maxStacks", 27, 1, 54);
+
+    public static final ModConfigSpec.IntValue MAX_FIREWORKS = BUILDER
+            .comment("Most firework rockets one burst launches; any more drop as items.")
+            .defineInRange("maxFireworks", 16, 0, 64);
 
     public static final ModConfigSpec.IntValue MIN_TOUGHNESS = BUILDER
             .comment("A new pinata gets a random toughness between these two numbers.",
@@ -76,6 +81,15 @@ public final class Config {
     }
 
     public static final ModConfigSpec SPEC = BUILDER.build();
+
+    /** Limits for text shown before a world (and so this config) is loaded, e.g. item tooltips. */
+    public static int maxStacks() {
+        return SPEC.isLoaded() ? MAX_STACKS.get() : 27;
+    }
+
+    public static int maxCritters() {
+        return SPEC.isLoaded() ? MAX_CRITTERS.get() : 12;
+    }
 
     private Config() {}
 }

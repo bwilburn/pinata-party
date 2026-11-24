@@ -1,7 +1,7 @@
 {
   "itemGroup.pinataparty": "Piñata Party",
   "item.pinataparty.pinata": "Piñata",
-  "item.pinataparty.pinata.tooltip.empty": "Empty. Hang it up, then right-click it with items or bottled bees.",
+  "item.pinataparty.pinata.tooltip.empty": "Empty. Hang it up, then right-click it with items, fireworks or bottled critters.",
   "item.pinataparty.pinata.tooltip.filled": "Filled: %s stacks, %s bees",
   "item.pinataparty.pinata.tooltip.buzzing": "Something inside is buzzing...",
   "item.pinataparty.pinata_bat": "Piñata Bat",
@@ -11,7 +11,20 @@
   "item.pinataparty.bottled_bee.tooltip": "It is not happy about this.",
   "entity.pinataparty.pinata": "Piñata",
   "message.pinataparty.bees": "%s broke the piñata... it was full of BEES! (%s)",
-  "message.pinataparty.full_bees": "That piñata can't hold any more bees.",
   "message.pinataparty.full_items": "That piñata is stuffed full.",
-  "message.pinataparty.fill": "Piñata: %s/%s stacks (%s items), %s/%s bees"
+  "message.pinataparty.fill": "Piñata: %s/%s stacks (%s items), %s/%s critters",
+  "item.pinataparty.bottled_critter": "Bottled Critter",
+  "item.pinataparty.bottled_critter.of": "Bottled %s",
+  "item.pinataparty.bottled_critter.baby": "Baby",
+  "item.pinataparty.bottled_critter.tooltip.bee": "It is not happy about this.",
+  "item.pinataparty.bottled_critter.tooltip.chicken": "Bawk.",
+  "item.pinataparty.bottled_critter.tooltip.rabbit": "Thumping on the glass.",
+  "item.pinataparty.bottled_critter.tooltip.bat": "Hanging upside down from the cork.",
+  "item.pinataparty.bottled_critter.tooltip.frog": "Ribbit.",
+  "item.pinataparty.bottled_critter.tooltip.slime": "Squelch.",
+  "item.pinataparty.bottled_critter.tooltip.silverfish": "Why would you bottle this.",
+  "message.pinataparty.full_critters": "That piñata can't hold any more critters.",
+  "message.pinataparty.cant_bottle": "That won't fit in a bottle.",
+  "message.pinataparty.cant_bottle_pet": "That's someone's pet!",
+  "message.pinataparty.cant_bottle_big": "Too big. Only the smallest slimes fit."
 }
