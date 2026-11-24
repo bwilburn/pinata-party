@@ -203,15 +203,19 @@ public class PinataTests {
         bee.setPersistentAngerTarget(p.getUUID());
         bee.setTarget(p);
 
-        float before = p.getHealth();
-        bee.doHurtTarget(p);
-        helper.assertTrue(p.getHealth() < before, "the sting should hurt (" + before + " -> " + p.getHealth()
-                + ", difficulty " + helper.getLevel().getDifficulty() + ")");
-        helper.assertFalse(bee.hasStung(), "a party bee shouldn't lose its stinger");
-        helper.assertTrue(bee.isAngry(), "a party bee should still be angry after stinging");
-
+        // a player who has just joined can't be hurt for 3 seconds (60 ticks)
+        helper.runAfterDelay(70, () -> {
+            bee.setRemainingPersistentAngerTime(300);
+            bee.setTarget(p);
+            float before = p.getHealth();
+            bee.doHurtTarget(p);
+            helper.assertTrue(p.getHealth() < before, "the sting should hurt (" + before + " -> " + p.getHealth()
+                    + ", difficulty " + helper.getLevel().getDifficulty() + ")");
+            helper.assertFalse(bee.hasStung(), "a party bee shouldn't lose its stinger");
+            helper.assertTrue(bee.isAngry(), "a party bee should still be angry after stinging");
+        });
         // the next sting lands once the player's hurt cooldown has passed
-        helper.runAfterDelay(15, () -> {
+        helper.runAfterDelay(90, () -> {
             float mid = p.getHealth();
             bee.doHurtTarget(p);
             helper.assertTrue(p.getHealth() < mid, "a second sting should hurt too");
@@ -280,12 +284,15 @@ public class PinataTests {
     public static void partyBeesCantKill(GameTestHelper helper) {
         helper.getLevel().getServer().setDifficulty(net.minecraft.world.Difficulty.HARD, true);
         ServerPlayer p = player(helper);
-        p.setHealth(4.0f);
         Bee bee = helper.spawn(EntityType.BEE, new Vec3(2.5, 2.0, 2.5));
         bee.addTag(PinataEntity.PARTY_BEE_TAG);
-        p.hurt(p.damageSources().sting(bee), 100.0f);
-        helper.assertTrue(p.isAlive() && p.getHealth() >= 1.0f, "a party bee sting shouldn't kill, health " + p.getHealth());
-        helper.assertTrue(p.getHealth() < 4.0f, "but it should still hurt, health " + p.getHealth());
-        helper.succeed();
+        // wait out the just-joined player's 3 seconds of damage immunity
+        helper.runAfterDelay(70, () -> {
+            p.setHealth(4.0f);
+            p.hurt(p.damageSources().sting(bee), 100.0f);
+            helper.assertTrue(p.isAlive() && p.getHealth() >= 1.0f, "a party bee sting shouldn't kill, health " + p.getHealth());
+            helper.assertTrue(p.getHealth() < 4.0f, "but it should still hurt, health " + p.getHealth());
+            helper.succeed();
+        });
     }
 }
